@@ -52,7 +52,11 @@
 #include <ml_status.h>
 
 #include <math.h>
+
+
+#ifndef ARDUINO
 #include <stdio.h>
+#endif
 
 
 /*

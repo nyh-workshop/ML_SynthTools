@@ -29,7 +29,7 @@
  */
 
 /**
- * @file midi_interface.h
+ * @file midi_interface.ino
  * @author Marcel Licence
  * @date 04.10.2021
  *
@@ -47,6 +47,7 @@
 #endif
 
 
+
 #ifdef ML_SYNTH_INLINE_DECLARATION
 
 
@@ -56,7 +57,6 @@ void Midi_Process();
 #ifdef MIDI_VIA_USB_ENABLED
 void Midi_HandleShortMsg(uint8_t *data, uint8_t cable __attribute__((unused)));
 #endif
-void Midi_HandleShortMsgEx(uint8_t *data, uint8_t cable __attribute__((unused)));
 
 #ifdef MIDI_TX2_PIN
 void Midi_SendShortMessage(uint8_t *msg);
@@ -187,19 +187,8 @@ struct midiMapping_s
     void (*modWheel)(uint8_t ch, float value);
 #endif
     void (*programChange)(uint8_t ch, uint8_t program_number);
-#ifdef MIDI_CHANNEL_PRESSURE_ENABLED
-#ifdef MIDI_FMT_INT
-    void (*channelPressure)(uint8_t ch, uint8_t pressure);
-#else
-    void (*channelPressure)(uint8_t ch, float pressure);
-#endif
-#endif
     void (*rttMsg)(uint8_t msg);
     void (*songPos)(uint16_t pos);
-
-#ifdef MIDI_SYSEX_ENABLED
-    void (*sysEx)(uint8_t *msg, uint8_t len);
-#endif
 
     struct midiControllerMapping *controlMapping;
     int mapSize;
@@ -214,20 +203,15 @@ struct midiMapping_s
 /*
  * following variables shall be defined in z_config.ino
  */
-extern struct midiMapping_s midiMapping; /**< midiMapping is not defined here. please define your own MIDI map in a separate file */
+extern struct midiMapping_s midiMapping;
 #ifdef MIDI_MAP_FLEX_ENABLED
 extern struct midiMapLookUpEntry midiMapLookUp[];
 extern int midiMapLookUpCnt;
 #endif
 
+/* constant to normalize midi value to 0.0 - 1.0f */
+#define NORM127MUL  0.007874f
 
-#define NORM127MUL  0.007874f /**< constant to normalize MIDI value to 0.0 - 1.0f */
-
-/**
-@brief This function will be called when a NoteOn message has been detected
-@param ch Channel on which the note on was received
-@param vel Velocity of the note on
- */
 inline void Midi_NoteOn(uint8_t ch, uint8_t note, uint8_t vel)
 {
 #ifdef MIDI_BLE_ENABLED
@@ -283,8 +267,8 @@ inline void Midi_CC_Map(uint8_t channel, uint8_t data1, uint8_t data2, struct mi
     }
 }
 
-/**
- * @brief this function will be called when a control change message has been received
+/*
+ * this function will be called when a control change message has been received
  */
 inline void Midi_ControlChange(uint8_t channel, uint8_t data1, uint8_t data2)
 {
@@ -292,7 +276,10 @@ inline void Midi_ControlChange(uint8_t channel, uint8_t data1, uint8_t data2)
     Ble_ControlChange(channel, data1, data2);
 #endif
 
+#ifndef MIDI_DISABLE_CC
     Midi_CC_Map(channel, data1, data2, midiMapping.controlMapping, midiMapping.mapSize);
+#endif
+	
 #ifdef MIDI_MAP_FLEX_ENABLED
     Midi_CC_Map(channel, data1, data2, midiMapping.controlMapping_flex, midiMapping.mapSize_flex);
 #endif
@@ -310,8 +297,8 @@ inline void Midi_ControlChange(uint8_t channel, uint8_t data1, uint8_t data2)
     }
 }
 
-/**
- * @param program_numer: to select program from 0 - 127
+/*
+ * program_numer: to select program from 0 - 127
  * to access more sound use control change with a bank select!
  */
 inline void Midi_ProgramChange(uint8_t ch, uint8_t program_number)
@@ -320,20 +307,6 @@ inline void Midi_ProgramChange(uint8_t ch, uint8_t program_number)
     {
         midiMapping.programChange(ch, program_number);
     }
-}
-
-inline void Midi_ChannelPressure(uint8_t ch __attribute__((__unused__)), uint8_t pressure __attribute__((__unused__)))
-{
-#ifdef MIDI_CHANNEL_PRESSURE_ENABLED
-    if (midiMapping.channelPressure != NULL)
-    {
-#ifdef MIDI_FMT_INT
-        midiMapping.channelPressure(ch, pressure);
-#else
-        midiMapping.channelPressure(ch, (float)pressure * NORM127MUL);
-#endif
-    }
-#endif
 }
 
 inline void Midi_PitchBend(uint8_t ch, uint16_t bend)
@@ -399,10 +372,6 @@ inline void Midi_HandleShortMsg(uint8_t *data, uint8_t cable __attribute__((unus
     case 0xc0:
         Midi_ProgramChange(ch, data[1]);
         break;
-    /* channel pressure */
-    case 0xD0:
-        Midi_ChannelPressure(ch, data[1]);
-        break;
     /* pitchbend */
     case 0xe0:
         Midi_PitchBend(ch, ((((uint16_t)data[1])) + ((uint16_t)data[2] << 7)));
@@ -414,11 +383,6 @@ inline void Midi_HandleShortMsg(uint8_t *data, uint8_t cable __attribute__((unus
     }
 }
 
-void Midi_HandleShortMsgEx(uint8_t *data, uint8_t cable __attribute__((unused)))
-{
-    Midi_HandleShortMsg(data, cable);
-}
-
 inline void Midi_RealTimeMessage(uint8_t msg)
 {
     if (midiMapping.rttMsg != NULL)
@@ -427,7 +391,6 @@ inline void Midi_RealTimeMessage(uint8_t msg)
     }
 }
 
-#if (defined MIDI_PORT_ACTIVE) or (defined MIDI_PORT1_ACTIVE) or (defined MIDI_PORT2_ACTIVE)
 static void Midi_PortSetup(struct midi_port_s *port)
 {
     /* reset the watchdog variables */
@@ -435,13 +398,7 @@ static void Midi_PortSetup(struct midi_port_s *port)
     memset(port->inMsg, 0, sizeof(port->inMsg));
     port->inMsgIndex = 0;
 }
-#endif
 
-/**
-    @brief Call this function to ensure MIDI will be setup to use selected serial ports.
-            The setting will be controlled be the defines.
-            On startup you will see some debug output in the serial monitor to get information about your current configuration
- */
 void Midi_Setup()
 {
 #ifdef MIDI_RECV_FROM_SERIAL
@@ -522,6 +479,8 @@ void Midi_Setup()
 
 void Midi_CheckMidiPort(struct midi_port_s *port)
 {
+    //Choose Serial1 or Serial2 as required
+
     if (port->serial->available())
     {
         uint8_t incomingByte = port->serial->read();
@@ -565,10 +524,6 @@ void Midi_CheckMidiPort(struct midi_port_s *port)
             }
 #endif
             Midi_HandleShortMsg(port->inMsg, 0);
-            if (midiMapping.rawMsg != NULL)
-            {
-                midiMapping.rawMsg(port->inMsg);
-            }
             port->inMsgIndex = 0;
         }
 
@@ -628,18 +583,6 @@ void Midi_SendRaw(uint8_t *msg)
             i++;
         }
         MidiPort2.serial->write(msg, i + 1);
-    }
-    else if ((msg[0] & 0xF0) == 0xC0)
-    {
-        MidiPort2.serial->write(msg, 2);
-    }
-    else if ((msg[0] & 0xF0) == 0xD0)
-    {
-        MidiPort2.serial->write(msg, 2);
-    }
-    else if ((msg[0] & 0xF0) == 0xF0)
-    {
-        MidiPort2.serial->write(msg, 1);
     }
     else
     {

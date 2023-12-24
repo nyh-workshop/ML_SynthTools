@@ -51,7 +51,7 @@
 
 void MidiStreamPlayer_Init();
 void MidiStreamPlayer_PlayFile(char *midi_filename);
-void MidiStreamPlayer_Tick(uint32_t ticks);
+bool MidiStreamPlayer_Tick(uint32_t ticks);
 void MidiStreamPlayer_Init();
 void MidiStreamPlayer_PausePlayback(void);
 void MidiStreamPlayer_StopPlayback(void);
@@ -72,7 +72,7 @@ void MidiStreamPlayer_PlayMidiFile_fromLittleFS(char *filename, uint8_t trackToP
 //#define MIDI_STREAM_PLAYER_DATA_DUMP /*!< optional to dump event data from midi file */
 
 
-#if (defined ARDUINO_DAISY_SEED) || (defined STM32H7xx)
+#ifdef ARDUINO_DAISY_SEED
 #include <STM32SD.h>
 
 extern Sd2Card card;
@@ -336,7 +336,9 @@ void MidiStreamPlayer_PlayMidiFile_fromLittleFS(char *filename, uint8_t trackToP
 #endif
     midiStreamPlayerHandle.noteOn = MidiStreamPlayer_NoteOn;
     midiStreamPlayerHandle.noteOff = MidiStreamPlayer_NoteOff;
+#ifndef MIDI_DISABLE_CC
     midiStreamPlayerHandle.controlChange = MidiStreamPlayer_ControlChange;
+#endif
     midiStreamPlayerHandle.ff = &mdiCallbacks;
 
     midiStreamPlayerHandle.midi_tempo = (60000000.0 / 100.0);
@@ -460,7 +462,7 @@ void MidiStreamPlayer_StartPlayback(void)
     duration *= midiStreamPlayerHandle.midi_tempo;
 }
 
-void MidiStreamPlayer_Tick(uint32_t ticks)
+bool MidiStreamPlayer_Tick(uint32_t ticks)
 {
     if (midiPlaying == false)
     {
@@ -501,6 +503,8 @@ void MidiStreamPlayer_Tick(uint32_t ticks)
             duration *= midiStreamPlayerHandle.midi_tempo;
         }
     }
+	
+	return midiPlaying;
 }
 
 void MidiStreamPlayer_ListFiles(uint8_t filesystem)

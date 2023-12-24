@@ -49,7 +49,11 @@
 
 #ifdef ML_SYNTH_INLINE_DECLARATION
 
+#ifndef ESP32S3_I2S
 void setup_i2s();
+#else
+void setup_i2s_ESP32S3();
+#endif
 bool i2s_write_stereo_samples_i16(const int16_t *fl_sample, const int16_t *fr_sample, const int buffLen);
 bool i2s_write_stereo_samples_buff(const float *fl_sample, const float *fr_sample, const int buffLen);
 void i2s_read_stereo_samples_buff(float *fl_sample, float *fr_sample, const int buffLen);
@@ -63,7 +67,11 @@ void i2s_read_stereo_samples_buff(int16_t *fl_sample, int16_t *fr_sample, const 
 
 #ifdef ESP32
 
+#ifndef ESP32S3_I2S
 #include <driver/i2s.h>
+#else
+#include <driver/i2s_std.h>
+#endif
 
 
 #ifdef I2S_NODAC
@@ -125,6 +133,10 @@ union sampleTUNT
 
 const i2s_port_t i2s_port_number = I2S_NUM_0;
 
+#ifdef ESP32S3_I2S
+static i2s_chan_handle_t tx_chan; // I2S tx channel handler
+#endif
+
 /*
  * please refer to https://www.hackster.io/janost/audio-hacking-on-the-esp8266-fa9464#toc-a-simple-909-drum-synth-0
  * for the following implementation
@@ -133,7 +145,12 @@ const i2s_port_t i2s_port_number = I2S_NUM_0;
 bool i2s_write_sample_32ch2(uint64_t sample)
 {
     static size_t bytes_written = 0;
+	
+#ifndef ESP32S3_I2S
     i2s_write((i2s_port_t)i2s_port_number, (const char *)&sample, 8, &bytes_written, portMAX_DELAY);
+#else
+	//#error ESP32S3 not supported at this time!
+#endif
 
     if (bytes_written > 0)
     {
@@ -153,8 +170,12 @@ bool i2s_write_sample_24ch2(uint8_t *sample)
 {
     static size_t bytes_written1 = 0;
     static size_t bytes_written2 = 0;
+#ifndef ESP32S3_I2S
     i2s_write(i2s_port_number, (const char *)&sample[1], 3, &bytes_written1, portMAX_DELAY);
     i2s_write(i2s_port_number, (const char *)&sample[5], 3, &bytes_written2, portMAX_DELAY);
+#else
+    //#error ESP32S3 not supported at this time!
+#endif
 
     if ((bytes_written1 + bytes_written2) > 0)
     {
@@ -179,8 +200,12 @@ bool i2s_write_stereo_samples(const float *fl_sample, const float *fr_sample)
     sampleDataU.ch[1] = (SAMPLE_DATA_TYPE)(*fl_sample * MULTIPLIER_CONST);
 
     size_t bytes_written = 0;
-
+	
+#ifndef ESP32S3_I2S
     i2s_write(i2s_port_number, (const char *)&sampleDataU.sample, 2 * BYTES_PER_SAMPLE, &bytes_written, portMAX_DELAY);
+#else
+	//#error ESP32S3 not supported at this time!
+#endif
 
     if (bytes_written > 0)
     {
@@ -204,7 +229,13 @@ bool i2s_write_stereo_samples_i16(const int16_t *fl_sample, const int16_t *fr_sa
 #ifdef CYCLE_MODULE_ENABLED
     calcCycleCountPre();
 #endif
+
+#ifndef ESP32S3_I2S
     i2s_write(i2s_port_number, (const char *)&sampleDataU.sample, 4, &bytes_written, portMAX_DELAY);
+#else
+	//#error ESP32S3 not supported at this time!
+#endif
+	
 #ifdef CYCLE_MODULE_ENABLED
     calcCycleCount();
 #endif
@@ -243,7 +274,13 @@ bool i2s_write_stereo_samples_i16(const int16_t *fl_sample, const int16_t *fr_sa
 #ifdef CYCLE_MODULE_ENABLED
     calcCycleCountPre();
 #endif
+
+#ifndef ESP32S3_I2S
     i2s_write(i2s_port_number, (const char *)&sampleDataU[0].sample, 2 * BYTES_PER_SAMPLE * buffLen, &bytes_written, portMAX_DELAY);
+#else
+	//#error ESP32S3 not supported at this time!
+#endif
+	
 #ifdef CYCLE_MODULE_ENABLED
     calcCycleCount();
 #endif
@@ -321,7 +358,11 @@ bool i2s_write_stereo_samples_buff(const float *fl_sample, const float *fr_sampl
 #ifdef CYCLE_MODULE_ENABLED
     calcCycleCountPre();
 #endif
+#ifndef ESP32S3_I2S
     i2s_write(i2s_port_number, (const char *)&sampleDataU[0].sample, 2 * BYTES_PER_SAMPLE * buffLen, &bytes_written, portMAX_DELAY);
+#else
+	ESP_ERROR_CHECK(i2s_channel_write(tx_chan, (const char *)&sampleDataU[0].sample, 2 * BYTES_PER_SAMPLE * buffLen, &bytes_written, portMAX_DELAY));
+#endif
 #ifdef CYCLE_MODULE_ENABLED
     calcCycleCount();
 #endif
@@ -342,10 +383,11 @@ void i2s_read_stereo_samples(float *fl_sample, float *fr_sample)
     static size_t bytes_read = 0;
 
     static union sampleTUNT sampleData;
-
+#ifndef ESP32S3_I2S
     i2s_read(i2s_port_number, (char *)&sampleData.sample, 4, &bytes_read, portMAX_DELAY);
-
-
+#else
+	//#error ESP32S3 not supported at this time!
+#endif
     /*
      * using RIGHT_LEFT format
      */
@@ -361,8 +403,11 @@ void i2s_read_stereo_samples_buff(int16_t *fl_sample, int16_t *fr_sample, const 
 
     static union sampleTUNT sampleData[SAMPLE_BUFFER_SIZE];
 
+#ifndef ESP32S3_I2S
     i2s_read(i2s_port_number, (char *)&sampleData[0].sample, 2 * BYTES_PER_SAMPLE * buffLen, &bytes_read, portMAX_DELAY);
-
+#else
+	//#error ESP32S3 not supported at this time!
+#endif 
 
     for (int n = 0; n < buffLen; n++)
     {
@@ -382,9 +427,11 @@ void i2s_read_stereo_samples_buff(float *fl_sample, float *fr_sample, const int 
 
     static union sampleTUNT sampleData[SAMPLE_BUFFER_SIZE];
 
-
+#ifndef ESP32S3_I2S
     i2s_read(i2s_port_number, (char *)&sampleData[0].sample, 2 * BYTES_PER_SAMPLE * buffLen, &bytes_read, 0);
-
+#else
+	//#error ESP32S3 not supported at this time!
+#endif    
 
     for (int n = 0; n < buffLen; n++)
     {
@@ -402,6 +449,8 @@ void i2s_read_stereo_samples_buff(float *fl_sample, float *fr_sample, const int 
 /*
  * i2s configuration
  */
+#ifndef ESP32S3_I2S
+
 #ifdef I2S_NODAC
 static const i2s_config_t i2s_configuration =
 {
@@ -480,7 +529,11 @@ i2s_config_t i2s_configuration =
     .bits_per_chan = I2S_BITS_PER_CHAN_32BIT,
 #endif
 #endif
+
+
 };
+#endif
+
 #endif
 
 
@@ -495,6 +548,8 @@ i2s_pin_config_t pins =
 };
 #endif
 #else
+
+#ifndef ESP32S3_I2S
 i2s_pin_config_t pins =
 {
 #ifdef ARDUINO_RUNNING_CORE
@@ -511,6 +566,9 @@ i2s_pin_config_t pins =
 };
 #endif
 
+#endif
+
+#ifndef ESP32S3_I2S
 void setup_i2s()
 {
     i2s_driver_install(i2s_port_number, &i2s_configuration, 0, NULL);
@@ -552,6 +610,51 @@ void setup_i2s()
     }
 #endif
 }
+#endif
+
+#ifdef ESP32S3_I2S
+void setup_i2s_ESP32S3()
+{
+	/* Setp 1: Determine the I2S channel configuration and allocate two channels one by one
+     * The default configuration can be generated by the helper macro,
+     * it only requires the I2S controller id and I2S role
+     * The tx and rx channels here are registered on different I2S controller,
+     * only ESP32-C3, ESP32-S3 and ESP32-H2 allow to register two separate tx & rx channels on a same controller */
+    i2s_chan_config_t tx_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    ESP_ERROR_CHECK(i2s_new_channel(&tx_chan_cfg, &tx_chan, NULL));
+
+    /* Step 2: Setting the configurations of standard mode and initialize each channels one by one
+     * The slot configuration and clock configuration can be generated by the macros
+     * These two helper macros is defined in 'i2s_std.h' which can only be used in STD mode.
+     * They can help to specify the slot and clock configurations for initialization or re-configuring */
+    i2s_std_config_t tx_std_cfg = {
+        .clk_cfg  = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg = {
+            .mclk = I2S_GPIO_UNUSED,    // some codecs may require mclk signal, this example doesn't need it
+            .bclk = I2S_BCLK_PIN,
+            .ws   = I2S_WCLK_PIN,
+            .dout = I2S_DOUT_PIN,
+            .din  = I2S_GPIO_UNUSED,
+            .invert_flags = {
+                .mclk_inv = false,
+                .bclk_inv = false,
+                .ws_inv   = false,
+            },
+        },
+    };
+    ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_chan, &tx_std_cfg));
+
+    ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
+
+	Serial.printf("ESP32S3 I2S ESP-IDF 5.x driver init! :D\n");
+	
+	Serial.printf("I2S configured using following pins:\n");
+    Serial.printf("    BCLK,BCK: %d\n", tx_std_cfg.gpio_cfg.bclk);
+    Serial.printf("    WCLK,LCK: %d\n", tx_std_cfg.gpio_cfg.ws);
+    Serial.printf("    DOUT: %d\n", tx_std_cfg.gpio_cfg.dout);
+}
+#endif
 
 #endif /* ESP32 */
 

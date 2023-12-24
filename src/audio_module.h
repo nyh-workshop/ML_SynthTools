@@ -148,7 +148,15 @@ void Audio_Setup(void)
 
 
 #ifdef ESP32
+
+#ifdef ESP32S3_I2S
+	Serial.printf("ESP32S3 I2S starting!\n");
+    setup_i2s_ESP32S3();
+#else 
+	Serial.printf("ESP32 I2S starting!\n");
     setup_i2s();
+#endif
+
 #endif
 
 #ifdef ESP8266
@@ -470,16 +478,8 @@ void Audio_OutputMono(const int32_t *samples)
 #endif /* ARDUINO_GENERIC_F407VGTX */
 
 #ifdef ARDUINO_DISCO_F407VG
-    int16_t mono_s16[SAMPLE_BUFFER_SIZE];
-
-    for (int i = 0; i < SAMPLE_BUFFER_SIZE; i++)
-    {
-        uint16_t val = samples[i] ; /* 21 with 32 bit input */
-        mono_s16[i] = val;
-    }
-
-    STM32F407G_AudioWriteS16(mono_s16, mono_s16);
-#endif /* ARDUINO_DISCO_F407VG */
+    STM32_AudioWriteS16(samples);
+#endif
 }
 
 void Audio_Output(const Q1_14 *left, const Q1_14 *right)
@@ -490,6 +490,7 @@ void Audio_Output(const Q1_14 *left, const Q1_14 *right)
 #ifndef ARDUINO_SEEED_XIAO_M0
 void Audio_Output(const int16_t *left, const int16_t *right)
 {
+	Serial.print("*");
 #ifdef ESP32
     i2s_write_stereo_samples_i16(left, right, SAMPLE_BUFFER_SIZE);
 #endif /* ESP32 */
